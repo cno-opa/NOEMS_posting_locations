@@ -1,0 +1,338 @@
+---
+title: "Calculating Optimal Placement Locations"
+output:
+  html_notebook:
+    highlight: zenburn
+    toc: yes
+  html_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+library(rprojroot)
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+
+
+```
+
+
+
+```{r, eval=FALSE}
+library(readr)
+library(lubridate)
+library(reshape2)
+library(raster)
+library(maptools)
+library(plyr)
+library(dplyr)
+library(knitr)
+library(scales)
+library(rgdal)
+library(ggplot2)
+library(ggmap)
+library(gmodels)
+library(DT)
+library(ggrepel)
+library(purrr)
+library(feather)
+library(tidyr)
+library(readxl)
+###Loads calls and function for loading polygons
+source("code/01_load_datasets.R")
+```
+
+
+
+
+##Setup  
+
+###Drawing polygons  
+
+- An ArcGIS Online Map with candidate locations can be used to draw drive time polygons.  It's found on AGO in abwilliamson folder... called EMS_candidate_location_map.  It uses points found in this project directory: data/input_points/cleaned_points.  High traffic = 5pm Monday.  Low-traffic = 2am Tuesday
+
+- Draw the polygons, extract the shapefile to data/algorithm/polygons/
+
+
+###Load polygons  
+
+```{r}
+source("code/functions/estimate_coverage.R")
+polygons <- read_polygons("data/drive_time_polygons", layer_name = "Drive_Time_polygons___8_Minutes")
+```
+
+
+
+```{r}
+
+calls <- calls_since_2016[ calls_since_2016@data$DayShift == 'Day' &  
+                             date(calls_since_2016@data$IncidentDate) >= date('2016-06-01') &
+                             calls_since_2016$InitialPriority == 3,] %>% 
+  spTransform( NOLA.proj) 
+
+traffic <- 'high'
+
+solution_size <- 2
+
+polygons$NewName <- as.character(polygons$NewName)
+
+additional_description <- 'example_quick_execution'
+```
+
+##Finding optimal placement  
+
+##Coverage Estimates  
+
+
+```{r, eval=FALSE}
+coverage_estimates <- solve.simultaneous(calls, polygons[1:10,], solution_size)
+
+write.csv( df,  file = paste("data/", today(), 
+                             "_coverage_estimates_",
+                             additional_description,
+                             traffic,
+                             "_traffic_", 
+                             solution_size,
+                             ".csv", 
+                             sep = ""))
+```
+
+
+##Top Coverage Tier  
+
+
+Now look at the coverage offered by these solution sets.  A good way to compare coverage across solution sets by performing a Poisson Test comparison with the highest-level of coverage.  The resulting p-value represents the probability of seeing a coverage rate less than or equal to the observed coverage rate, given that the actual coverage rate was the same as the top coverage rate.  
+
+
+```{r}
+coverage_estimates <- add.poisson.test(coverage_estimates)
+```
+
+
+
+
+```{r}
+p_value_threshold <- .0000001
+
+top_tier_polygon_sets <- coverage_estimates %>% filter(p.value >= p_value_threshold) %>%
+  mutate(p.value = round(p.value,4))
+```
+
+
+##Overlapping coverage  
+
+```{r}
+ptm <- proc.time()
+
+
+polygon_names     <- top_tier_polygon_sets[, grepl("V",names( top_tier_polygon_sets))]
+
+get.polygons.by.name <- function(list, polygons.source) {
+ 
+  polygons.source[polygons.source$NewName %in%  unlist(list), ]
+}
+
+
+
+output  <- top_tier_polygon_sets %>% 
+  mutate( indic = 1,
+    ID = cumsum(indic)) %>% 
+  select(-indic) %>%
+  group_by(ID) %>%
+  nest() %>%
+  mutate(location_names = map(data, getNames))
+
+output <- output %>% mutate( polygon_set = map(location_names,get.polygons.by.name, polygons))
+
+output <- output %>% mutate( coverage = map(polygon_set, calculate_coverage, calls))
+
+
+
+
+print(proc.time() - ptm)
+
+```
+
+
+
+```{r}
+overlap_measurements <- output %>% 
+  unnest(data, coverage, .drop = TRUE) %>% 
+  mutate(TotalCalls = length(calls)) %>% 
+  mutate(CoveragePercent = percent(coverage/TotalCalls),
+          DoubleCoveragePercent = percent(double_coverage/TotalCalls),
+            TripleCoveragePercent = percent(triple_coverage/TotalCalls),
+         coverage_sum = double_coverage + triple_coverage) %>% 
+  arrange(desc(coverage_sum))
+```
+
+
+
+##Selecting Optimal Set  
+
+
+```{r}
+solution_list <- overlap_measurements
+solution <- solution_list[18,]
+top.names <- solution[, grepl("V",names(solution_list))]
+
+top.polygons <- get.polygons.by.name(top.names, polygons)
+
+top.polygons.data <- top.polygons@data
+top.polygons.data <- select(top.polygons.data, (IsNew:Address))
+```
+
+
+
+##Filling out list  
+
+###Ordering initial set  
+
+```{r}
+ordered.polygons <- order.by.coverage(calls, top.polygons)
+
+ordered.solution <- arrange(ordered.polygons@data, desc(CallCount))
+```
+
+
+###Determining the rest  
+```{r}
+full_list <- rank.polygon.impact(calls, polygons, rank.to = 10, seed.polygons = top.polygons)
+
+full_list_no_seed <- rank.polygon.impact(calls, polygons, rank.to = 10)
+
+```
+
+```{r}
+
+full_list_data <- full_list@data
+full_list_data$CumulativeCoverage <- percent(cumsum(full_list_data$CallCount)/nrow(calls@data))
+full_list_data$ReplaceIfVacant <- TRUE
+full_list_data$ReplaceIfVacant[1:3] <- TRUE
+full_list_data$ReplaceIfVacant[-(1:3)] <- FALSE
+
+
+full_list_data$Order <- row(full_list_data)[,1]
+```
+
+
+
+```{r}
+all_points <- readOGR("data/input_points", layer = "cleaned_points") %>% 
+  spTransform( CRS("+init=epsg:4326"))
+
+all_points_data <- all_points@data %>% 
+  mutate(NewName = as.character(NewName))  
+
+calculated_point_order <- full_list_data %>% 
+  select(NewName, Order, ReplaceIfVacant)
+
+updated_data <- all_points_data %>% 
+  left_join(calculated_point_order, by = c( "NewName"))%>%
+  mutate( ReplaceIfVacant = ifelse(ReplaceIfVacant == TRUE,"X",NA)) %>%
+  mutate(Address = as.character(Address),
+         NewName = as.character(NewName))
+
+all_points@data <- updated_data
+```
+
+```{r}
+all_points_df <- data.frame(all_points)
+```
+
+
+```{r}
+solution_names <- all_points@data %>% filter(is.na(Order) == FALSE)
+
+solution_points <- all_points[all_points$NewName %in% solution_names$NewName,] 
+
+solution_points_df <- data.frame(solution_points) %>% arrange(Order) %>% slice(1:8)
+```
+
+
+
+
+
+###Solution Map  
+
+```{r}
+map <- qmap("New Orleans", zoom = 11, maptype = "roadmap") +
+  geom_point(data = solution_points_df, aes(coords.x1, coords.x2)) +
+  guides(size="none") +
+  geom_label(size = 4, 
+            data = solution_points_df, 
+            aes(x=coords.x1, y=coords.x2, label=Order,hjust=0,vjust=0), position = "nudge",
+            fontface = "bold",
+            check_overlap = TRUE
+            )
+```
+
+```{r}
+print_list <- select(solution_points_df,c(NewName,Address,ReplaceIfVacant,Order)) 
+
+names(print_list) <- c("Name", "Address","Primary Location","Rank")
+```
+
+
+
+```{r}
+map
+```
+
+
+
+```{r}
+print_list
+```
+
+
+
+```{r}
+library(ggfortify)
+make.graphable <- function(x) {
+  graphables <- spTransform(x, CRS("+init=epsg:4326"))
+  graphables@data$labX <- as.numeric(lapply(graphables@polygons, function(x) x@labpt[[1]]))
+  graphables@data$labY <- as.numeric(lapply(graphables@polygons, function(x) x@labpt[[2]]))
+  graphables@data$id <- rownames(graphables@data)
+  graphables.points <- fortify(graphables, region="id")
+  join(graphables.points, graphables@data, by="id")
+}
+
+names_to_graph <- c('Tulane Medical Center','SQUIRT 14',
+                    'Westbank Tolls',
+                    # 'I-10 and Read Blvd',
+                    'I-10 and Morrison',
+                    # "Old Gentilly/5000", 
+                    "I-10 and Downman Rd")
+# polygons.to.graph <- make.graphable(polygons[polygons$NewName %in% names_to_graph,])
+  polygons.to.graph <- make.graphable(full_list[1:4,])                           
+qmap("New Orleans", zoom = 11, maptype = "roadmap") +
+  geom_polygon(aes_string(x = "long", y = "lat", 
+                          group = 'group', fill = 'NewName'
+                          ), 
+               data = polygons.to.graph, 
+               alpha = 0.5, 
+               color = "black"
+               ) 
+
+
+  polygons.to.graph <- make.graphable(full_list[5:8,])                           
+qmap("New Orleans", zoom = 11, maptype = "roadmap") +
+  geom_polygon(aes_string(x = "long", y = "lat", 
+                          group = 'group', fill = 'NewName'
+                          ), 
+               data = polygons.to.graph, 
+               alpha = 0.5, 
+               color = "black"
+               ) 
+```
+
+
+
+##Save list  
+
+```{r}
+write_csv( solution_points_df,  paste("data/algorithm/", today(), "_coverage_estimates_",additional_description,traffic,"_traffic_", 
+                                      solution_size,".csv",
+                              sep = ""))
+```
