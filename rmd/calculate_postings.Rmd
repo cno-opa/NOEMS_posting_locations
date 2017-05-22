@@ -45,16 +45,16 @@ source("code/01_load_datasets.R")
 
 
 
-##Setup  
+## Setup  
 
-###Drawing polygons  
+### Drawing polygons  
 
 - An ArcGIS Online Map with candidate locations can be used to draw drive time polygons.  It's found on AGO in abwilliamson folder... called EMS_candidate_location_map.  It uses points found in this project directory: data/input_points/cleaned_points.  High traffic = 5pm Monday.  Low-traffic = 2am Tuesday
 
 - Draw the polygons, extract the shapefile to data/algorithm/polygons/
 
 
-###Load polygons  
+### Load polygons  
 
 ```{r}
 source("code/functions/estimate_coverage.R")
@@ -79,9 +79,9 @@ polygons$NewName <- as.character(polygons$NewName)
 additional_description <- 'example_quick_execution'
 ```
 
-##Finding optimal placement  
+## Finding optimal placement  
 
-##Coverage Estimates  
+## Coverage Estimates  
 
 
 ```{r, eval=FALSE}
@@ -98,7 +98,7 @@ write.csv( df,  file = paste("data/", today(),
 ```
 
 
-##Top Coverage Tier  
+## Top Coverage Tier  
 
 
 Now look at the coverage offered by these solution sets.  A good way to compare coverage across solution sets by performing a Poisson Test comparison with the highest-level of coverage.  The resulting p-value represents the probability of seeing a coverage rate less than or equal to the observed coverage rate, given that the actual coverage rate was the same as the top coverage rate.  
@@ -119,7 +119,7 @@ top_tier_polygon_sets <- coverage_estimates %>% filter(p.value >= p_value_thresh
 ```
 
 
-##Overlapping coverage  
+## Overlapping coverage  
 
 ```{r}
 ptm <- proc.time()
@@ -168,7 +168,7 @@ overlap_measurements <- output %>%
 
 
 
-##Selecting Optimal Set  
+## Selecting Optimal Set  
 
 
 ```{r}
@@ -184,9 +184,9 @@ top.polygons.data <- select(top.polygons.data, (IsNew:Address))
 
 
 
-##Filling out list  
+## Filling out list  
 
-###Ordering initial set  
+### Ordering initial set  
 
 ```{r}
 ordered.polygons <- order.by.coverage(calls, top.polygons)
@@ -195,7 +195,7 @@ ordered.solution <- arrange(ordered.polygons@data, desc(CallCount))
 ```
 
 
-###Determining the rest  
+### Determining the rest  
 ```{r}
 full_list <- rank.polygon.impact(calls, polygons, rank.to = 10, seed.polygons = top.polygons)
 
@@ -236,6 +236,7 @@ updated_data <- all_points_data %>%
 all_points@data <- updated_data
 ```
 
+
 ```{r}
 all_points_df <- data.frame(all_points)
 ```
@@ -253,7 +254,7 @@ solution_points_df <- data.frame(solution_points) %>% arrange(Order) %>% slice(1
 
 
 
-###Solution Map  
+### Solution Map  
 
 ```{r}
 map <- qmap("New Orleans", zoom = 11, maptype = "roadmap") +
@@ -329,7 +330,7 @@ qmap("New Orleans", zoom = 11, maptype = "roadmap") +
 
 
 
-##Save list  
+## Save list  
 
 ```{r}
 write_csv( solution_points_df,  paste("data/algorithm/", today(), "_coverage_estimates_",additional_description,traffic,"_traffic_", 
