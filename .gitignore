@@ -32,3 +32,13 @@ vignettes/*.pdf
 *.utf8.md
 *.knit.md
 .Rproj.user
+
+
+
+# Data files
+data/database_feathers/*
+
+# File with database info on source data
+
+code/functions/refreshData.R
+
