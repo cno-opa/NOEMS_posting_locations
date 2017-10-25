@@ -42,3 +42,5 @@ data/database_feathers/*
 
 code/functions/refreshData.R
 
+
+*.html
