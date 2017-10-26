@@ -18,5 +18,8 @@ library(DBI)
 library(dbplyr)
 library(odbc)
 library(tidyverse)
+library(ggthemr)
+library(forcats)
+library(ggthemes)
 
 lapply(list.files(path = 'code/functions',pattern = "[.]R$", recursive = TRUE), function(x) source(paste0('code/functions',"/",x)))
