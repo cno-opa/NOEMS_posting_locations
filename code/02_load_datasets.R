@@ -1,8 +1,7 @@
-source("code/functions/spatial.R")
-source("code/functions/refreshData.R")
+source('code/00_dependencies.R')
 
 
-incidents <- loadIncidentsFromFile() 
+incidents <- read_feather('data/source_incidents/incidents.feather')
 
 spatial_call_data <- incidents[!is.na(incidents$Latitude) & !is.na(incidents$Longtitude) & !is.na(incidents$ArrivedTime), ] %>% 
   spatialize_incidents()
