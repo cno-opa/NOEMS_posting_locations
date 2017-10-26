@@ -18,7 +18,7 @@ opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 ```{r}
 source('code/00_dependencies.R')
-source("code/02_load_datasets.R")
+source("code/02_load_placement_datasets.R")
 ```
 
 
