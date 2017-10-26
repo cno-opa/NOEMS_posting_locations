@@ -12,34 +12,13 @@ output:
 require("knitr")
 library(rprojroot)
 opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
-
-
 ```
 
 
 
-```{r, eval=FALSE}
-library(readr)
-library(lubridate)
-library(reshape2)
-library(raster)
-library(maptools)
-library(plyr)
-library(dplyr)
-library(knitr)
-library(scales)
-library(rgdal)
-library(ggplot2)
-library(ggmap)
-library(gmodels)
-library(DT)
-library(ggrepel)
-library(purrr)
-library(feather)
-library(tidyr)
-library(readxl)
-###Loads calls and function for loading polygons
-source("code/01_load_datasets.R")
+```{r}
+source('code/00_dependencies.R')
+source("code/02_load_datasets.R")
 ```
 
 
@@ -57,14 +36,12 @@ source("code/01_load_datasets.R")
 ### Load polygons  
 
 ```{r}
-source("code/functions/estimate_coverage.R")
 polygons <- read_polygons("data/drive_time_polygons", layer_name = "Drive_Time_polygons___8_Minutes")
 ```
 
 
 
 ```{r}
-
 calls <- calls_since_2016[ calls_since_2016@data$DayShift == 'Day' &  
                              date(calls_since_2016@data$IncidentDate) >= date('2016-06-01') &
                              calls_since_2016$InitialPriority == 3,] %>% 
@@ -172,14 +149,19 @@ overlap_measurements <- output %>%
 
 
 ```{r}
+optimal_index <- 1
+
 solution_list <- overlap_measurements
-solution <- solution_list[18,]
+
+solution <- solution_list[optimal_index,]
+
 top.names <- solution[, grepl("V",names(solution_list))]
+
 
 top.polygons <- get.polygons.by.name(top.names, polygons)
 
 top.polygons.data <- top.polygons@data
-top.polygons.data <- select(top.polygons.data, (IsNew:Address))
+top.polygons.data <- dplyr::select(top.polygons.data, c(IsNew:Address))
 ```
 
 
