@@ -34,13 +34,9 @@ vignettes/*.pdf
 .Rproj.user
 
 
+#Source data
 
-# Data files
-data/database_feathers/*
-
-# File with database info on source data
-
-code/functions/refreshData.R
+data/source_incidents/*
 
 
 *.html
