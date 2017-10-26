@@ -5,4 +5,7 @@ con <- dbConnect(odbc(),
 								 Server = "DEV-SQL01",
 								 Database = "TheBigEasy")
 
-incidents <- tbl(con, 'EMS_Incidents') 
+incidents <- tbl(con, 'EMS_Incidents') %>%
+	collect() %>%
+	write_csv('data/source_incidents/incidents.csv') %>%
+	write_feather('data/source_incidents/incidents.feather')
