@@ -151,4 +151,43 @@ order.by.coverage <- function(spatial.points, polygons) {
 	return(ordered.polygons)
 }
 
+rank.polygon.impact <- function(impact.points, polygons, rank.to = 2, seed.polygons = NULL) {
+	#Sequentially finds set of N polygons with most coverage.
+	
+	initial.polygons <- if (is.null(seed.polygons)) polygons else seed.polygons
+	
+	ordered.set <- order.by.coverage(impact.points, initial.polygons)
+	
+	solution.set <-  if (is.null(seed.polygons)) {
+		ordered.set[1,]
+	} else 
+		rank.polygon.impact(impact.points, 
+												seed.polygons, 
+												rank.to = nrow(seed.polygons@data) 
+		)
+	
+	remaining.polygons <- remove.by.NewName(solution.set$NewName, polygons)
+	if (rank.to > 1){
+		for (i in 2:rank.to) {
+			uncovered.calls <- uncovered.points(impact.points, solution.set)
+			ordered.set <- order.by.coverage(uncovered.calls, remaining.polygons )
+			next.greatest.coverage.polygon <- ordered.set[1,]
+			solution.set <- rbind(solution.set, next.greatest.coverage.polygon)
+			remaining.polygons <- remove.by.NewName(next.greatest.coverage.polygon$NewName, remaining.polygons)
+		}
+	}
+	
+	
+	
+	return(solution.set)
+}
 
+
+uncovered.points <- function(points, coverage.area) {
+	#The set of calls that lie outside of the set of polygons that is passed as an argument
+	within <- spTransform(points, NOLA.proj)
+	around <- spTransform(coverage.area, NOLA.proj)
+	calls.contained <- over(within, around, returnList = FALSE)
+	# return(calls.contained)
+	return(points[is.na(calls.contained[,1]) ,])
+}
