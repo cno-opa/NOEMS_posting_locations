@@ -1,0 +1,277 @@
+---
+title: "Test Evaluation"
+output:
+  html_document:
+    fig_height: 6
+    fig_width: 9
+    highlight: zenburn
+    theme: paper
+    toc: yes
+  html_notebook:
+    highlight: zenburn
+    theme: paper
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+library(rprojroot)
+opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+
+
+```{r}
+source('code/00_dependencies.R')
+source("code/11_load_analysis_data.R")
+ggthemr("pale", spacing = 2)
+```
+
+
+###NUAs by Hour  
+
+
+```{r}
+model_data %>%
+  group_by(DayShift, Hour = hour(IncidentDate)) %>%
+  summarise(NUArate = sum(ClearEMS <= 1)/n(), med_clear = median(ClearEMS)) %>%
+  ggplot() +
+  geom_col(aes(Hour, NUArate, fill = DayShift)) +
+  ggtitle("Ambulance Availability By Hour") + 
+  ylab("% of calls with 1 or fewer  units available")
+```
+
+
+# Filter outliers in time to dispatch  
+
+```{r}
+cutoff <- model_data %>% 
+  filter( IncidentDate < ymd('2017-04-10'),
+          IncidentDate >= ymd('2016-10-01')) %>%
+  mutate(dispatch_minutes = as.numeric(difftime( DispatchedTime,IncidentDate, "secs")/60)) %>%
+  mutate(decile = percent_rank(dispatch_minutes)) %>%
+  filter(decile <= .9) %>%
+  summarise(dispatch_cutoff = max(dispatch_minutes))
+
+
+
+
+model_data_filtered_dispatch <- model_data %>% 
+  filter( IncidentDate >= ymd('2016-10-01')) %>%
+  mutate(dispatch_minutes = as.numeric(difftime( DispatchedTime,IncidentDate, "secs")/60)) %>%
+  filter(dispatch_minutes <= cutoff$dispatch_cutoff)
+```
+
+```{r}
+model_data_filtered_dispatch <- model_data_filtered_dispatch %>% 
+
+
+  mutate(district = factor(BeatName, labels = c("Mid-City", 
+                                                "Uptown",
+                                                "Lakeview",
+                                                "Algiers", 
+                                                "9thWard", 
+                                                "Garden/CentraCity",
+                                                "NOEast",
+                                                "FQ/CBD")),
+         district = paste( BeatName, district, sep = "-"))
+
+
+model_data_filtered_dispatch <- model_data_filtered_dispatch %>%
+  mutate(Test =  paste(IsTest, DayShift),
+         Test = if_else(IsTest == 'Test', Test, as.character(IsTest) ))%>% 
+  mutate(shift_district = paste(district, DayShift)
+         ,
+         TestPeriod = factor(if_else(IsTest != 'Test','10/1-1/27', '1/27-6/5' )),
+         TestPeriod = fct_rev(TestPeriod)
+         
+         ) 
+```
+
+
+##Call Count
+
+```{r}
+model_data_filtered_dispatch %>%
+  group_by(TestPeriod) %>%
+  summarise(count = n())
+```
+
+
+
+###Night Shift  
+
+####RTC Summary  
+
+```{r}
+model_data_filtered_dispatch %>%
+  filter(DayShift == 'Night') %>%
+  group_by(TestPeriod) %>%
+  summarise(n = n(), nrtc = sum(IsRTC), RTC = round(nrtc/n,4)) %>%
+  ggplot( aes(x = TestPeriod, y = RTC, fill = TestPeriod)) +
+  geom_col(width = .5) + 
+  ggtitle("RTC Results") +
+  # theme_calc() +
+  geom_label(aes(label = percent(RTC)), fill = 'white') +
+  coord_cartesian(ylim = c(.3,.7)) + 
+  ylab("% calls under 12 minutes") + 
+  theme(legend.position = 'none')
+```
+
+####Median RTC  
+```{r}
+model_data_filtered_dispatch %>%
+  filter(DayShift == 'Night') %>%
+  group_by(TestPeriod) %>%
+  summarise(n = n(), nrtc = sum(IsRTC), RTC = round(nrtc/n,4), median_response = median(response_minutes)) %>%
+  ggplot( aes(x = TestPeriod, y = median_response, fill = TestPeriod)) +
+  geom_col(width = .5) + 
+  ggtitle("Median Response Time") +
+  # theme_calc() +
+  geom_label(aes(label = round(median_response, 2)), fill = 'white') +
+  ylab("Minutes") + 
+  theme(legend.position = 'none')
+```
+
+####District Summary  
+```{r}
+model_data_filtered_dispatch %>% 
+  filter( DayShift == 'Night') %>%
+  group_by(district, TestPeriod, DayShift) %>%
+  summarise(n = n(), rtc = sum(IsRTC), estimate = rtc/n, 
+            lowerCI = prop.test(rtc,n)$conf.int[[1]], upperCI = prop.test(rtc,n)$conf.int[[2]]) %>%
+  ungroup() %>%
+  group_by(TestPeriod, DayShift) %>%
+  mutate(groupUpperCI = max(upperCI), groupLowerCI = min(lowerCI)) %>%
+  ggplot(aes(x = district, y = estimate, ymin = lowerCI, ymax = upperCI, group = TestPeriod)) +
+  geom_errorbar(aes(color = TestPeriod, linetype = TestPeriod), position = 'dodge',
+                size = 2) +
+  theme_calc() +
+  geom_hline(aes(yintercept = groupUpperCI, color = TestPeriod, linetype = TestPeriod),  size = 1) +
+  geom_hline(aes(yintercept = groupLowerCI, color = TestPeriod, linetype = TestPeriod),  size = 1) +
+  ylab("% calls under 12 minutes")  + xlab("District") + 
+  ggtitle("RTC by District: Night Shift", subtitle = "95% confidence intervals around estimates")
+```
+
+
+
+###Day Shift  
+
+####RTC Summary  
+
+```{r}
+model_data_filtered_dispatch %>%
+  filter(DayShift == 'Day') %>%
+  group_by(TestPeriod) %>%
+  summarise(n = n(), nrtc = sum(IsRTC), RTC = round(nrtc/n,4)) %>%
+  ggplot( aes(x = TestPeriod, y = RTC, fill = TestPeriod)) +
+  geom_col(width = .5) + 
+  ggtitle("RTC Results") +
+  # theme_calc() +
+  geom_label(aes(label = percent(RTC)), fill = 'white') +
+  coord_cartesian(ylim = c(.3,.7)) + 
+  ylab("% calls under 12 minutes") + 
+  theme(legend.position = 'none')
+```
+
+####Median RTC  
+```{r}
+model_data_filtered_dispatch %>%
+  filter(DayShift == 'Day') %>%
+  group_by(TestPeriod) %>%
+  summarise(n = n(), nrtc = sum(IsRTC), RTC = round(nrtc/n,4), median_response = median(response_minutes)) %>%
+  ggplot( aes(x = TestPeriod, y = median_response, fill = TestPeriod)) +
+  geom_col(width = .5) + 
+  ggtitle("Median Response Time") +
+  # theme_calc() +
+  geom_label(aes(label = round(median_response, 2)), fill = 'white') +
+  ylab("Minutes") + 
+  theme(legend.position = 'none')
+```
+
+####District Summary  
+```{r}
+model_data_filtered_dispatch %>% 
+  filter( DayShift == 'Day') %>%
+  group_by(district, TestPeriod, DayShift) %>%
+  summarise(n = n(), rtc = sum(IsRTC), estimate = rtc/n, 
+            lowerCI = prop.test(rtc,n)$conf.int[[1]], upperCI = prop.test(rtc,n)$conf.int[[2]]) %>%
+  ungroup() %>%
+  group_by(TestPeriod, DayShift) %>%
+  mutate(groupUpperCI = max(upperCI), groupLowerCI = min(lowerCI)) %>%
+  ggplot(aes(x = district, y = estimate, ymin = lowerCI, ymax = upperCI, group = TestPeriod)) +
+  geom_errorbar(aes(color = TestPeriod, linetype = TestPeriod), position = 'dodge',
+                size = 2) +
+  theme_calc() +
+  geom_hline(aes(yintercept = groupUpperCI, color = TestPeriod, linetype = TestPeriod),  size = 1) +
+  geom_hline(aes(yintercept = groupLowerCI, color = TestPeriod, linetype = TestPeriod),  size = 1) +
+  ylab("% calls under 12 minutes")  + xlab("District") + 
+  ggtitle("RTC by District: Day Shift", subtitle = "95% confidence intervals around estimates")
+```
+
+
+###Overall  
+
+```{r}
+# totals <- model_data_filtered_dispatch %>%
+#   group_by(District = 'Total', IsTest = paste("% RTC", IsTest, sep = ":")) %>%
+#   summarise(RTC = percent( sum(IsRTC)/n() )) %>%
+#   spread(IsTest, RTC) 
+
+median_responses <- model_data_filtered_dispatch %>% 
+  group_by(District = district, TestPeriod = paste("Median Response", TestPeriod, sep = ":")) %>%
+  summarise(median_response = round(median(response_minutes) , 2)) %>%
+  spread(TestPeriod, median_response)
+
+model_data_filtered_dispatch %>%
+  filter(BeatName %in% c(4,7) ) %>%
+  group_by(District = district, TestPeriod) %>%
+  summarise(RTC = sum(IsRTC)/n() ) %>%
+  ggplot(aes(x = TestPeriod, y = RTC, fill = TestPeriod)) +
+  geom_col() +
+  ggtitle("RTC Results") +
+  # theme_calc() +
+  geom_label(aes(label = percent(RTC)), fill = 'white') +
+  coord_cartesian(ylim = c(.2,.6)) + 
+  ylab("% calls under 12 minutes") + 
+  theme(legend.position = 'none') + facet_wrap(~District, ncol = 2)
+  # left_join(median_responses) %>%
+  # arrange(`% RTC:Control`) %>%
+  # bind_rows(totals) %>%
+  # filter(District != 'Total') %>%
+  # select(c(1,3,2,5,4)) %>%
+  # kable()
+
+```
+
+
+####Measure of Equity   
+```{r}
+model_data_filtered_dispatch %>%
+  filter(DayShift == 'Day') %>%
+  group_by(District = district, TestPeriod) %>%
+  summarise(RTC = sum(IsRTC)/n() , count = n()) %>%
+  ungroup() %>%
+  group_by(TestPeriod) %>%
+  summarise(maxRTC = max(RTC), minRTC = min(RTC), spread = percent(maxRTC - minRTC),
+            maxRTC = percent(maxRTC), minRTC = percent(minRTC)) %>% 
+  kable()
+
+
+model_data_filtered_dispatch %>%
+  filter(DayShift == 'Night') %>%
+  group_by(District = district, TestPeriod) %>%
+  summarise(RTC = sum(IsRTC)/n() , count = n()) %>%
+  ungroup() %>%
+  group_by(TestPeriod) %>%
+  summarise(maxRTC = max(RTC), minRTC = min(RTC), spread = percent(maxRTC - minRTC),
+            maxRTC = percent(maxRTC), minRTC = percent(minRTC)) %>% kable()
+
+  # mutate(rank = row_number(desc(RTC)),
+  #       RTC = percent(RTC)) %>% 
+  # filter(rank > 6) %>%
+  # ungroup() %>%
+  # select(District, IsTest, RTC) %>%
+  # spread(IsTest, RTC) %>% kable()
+```
+
