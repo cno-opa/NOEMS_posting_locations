@@ -1,10 +1,10 @@
 ---
 title: "Calculating Optimal Placement Locations"
 output:
+  html_document:
+    toc: yes
   html_notebook:
     highlight: zenburn
-    toc: yes
-  html_document:
     toc: yes
 ---
 
@@ -62,16 +62,12 @@ additional_description <- 'example_quick_execution'
 
 
 ```{r, eval=FALSE}
-coverage_estimates <- solve.simultaneous(calls, polygons[1:10,], solution_size)
+coverage_estimates_file_name <- paste(
+	"data/", today(), "_coverage_estimates_", additional_description,traffic, 
+	"_traffic_", solution_size, ".csv", sep = "")
 
-write.csv( df,  file = paste("data/", today(), 
-                             "_coverage_estimates_",
-                             additional_description,
-                             traffic,
-                             "_traffic_", 
-                             solution_size,
-                             ".csv", 
-                             sep = ""))
+coverage_estimates <- solve.simultaneous(calls, polygons[1:10,], solution_size) %>%
+	write_csv(coverage_estimates_file_name)
 ```
 
 
