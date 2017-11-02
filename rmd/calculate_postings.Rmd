@@ -60,36 +60,42 @@ polygons <- polygons[ which( !grepl("martin luther king",
 																		polygons@data$Address, 
 																		ignore.case = TRUE  )),] %>%
 	spTransform( NOLA.proj)
+
+polygons$NewName <- as.character(polygons$NewName)
 ```
 
 
-
-```{r}
-calls <- calls_since_2016[ calls_since_2016@data$DayShift == 'Day' &  
-                             date(calls_since_2016@data$IncidentDate) >= date('2016-06-01') &
-                             calls_since_2016$InitialPriority == 3,] %>% 
+##Select calls for high traffic/DayShift   
+```{r select_calls}
+dayshift_calls <- spatial_call_data[ spatial_call_data@data$DayShift == 'Day' &  
+                             date(spatial_call_data@data$IncidentDate) >= date('2016-06-01') &
+                             spatial_call_data$InitialPriority == 3,] %>% 
   spTransform( NOLA.proj) 
+```
 
+# Finding optimal placement  
+
+## Coverage Estimates  
+
+For every set of `solution_size` polygons, count how many calls are within 8-minute
+driving distance.
+
+```{r estimate_coverage}
 traffic <- 'high'
 
 solution_size <- 2
 
-polygons$NewName <- as.character(polygons$NewName)
-
 additional_description <- 'example_quick_execution'
-```
 
-## Finding optimal placement  
+coverage_estimates_file_name <- paste0( "data/", today(), 
+																				"_coverage_estimates_high_traffic", 
+																				additional_description,"_traffic_", 
+																				solution_size, ".csv")
 
-## Coverage Estimates  
+##For performance, run with a sample.  For full calculation, run with all drive-time polygons.
+polygon_sample <- polygons[1:10,]
 
-
-```{r, eval=FALSE}
-coverage_estimates_file_name <- paste(
-	"data/", today(), "_coverage_estimates_", additional_description,traffic, 
-	"_traffic_", solution_size, ".csv", sep = "")
-
-coverage_estimates <- solve.simultaneous(calls, polygons[1:10,], solution_size) %>%
+coverage_estimates <- solve_simultaneous(dayshift_calls, polygon_sample, solution_size) %>%
 	write_csv(coverage_estimates_file_name)
 ```
 

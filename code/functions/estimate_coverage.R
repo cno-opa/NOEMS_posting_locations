@@ -1,53 +1,40 @@
-# NOLA.proj <- CRS("+init=epsg:3452")
+calculate_call_coverage <- function(polys, call_points) {
+  rev <- over(call_points, SpatialPolygons(polys@polygons, proj4string = polys@proj4string ))
+  sum(!is.na(rev))
+}
 
-solve.simultaneous <- function(model.calls, model.polys, m.size) {
+solve_simultaneous <- function(model_calls, model_polys, model_size) {
   ptm <- proc.time()
   
-  m.calls <- spTransform(model.calls, NOLA.proj)
-  m.polys <- spTransform(model.polys , NOLA.proj)
+  model_calls <- spTransform(model_calls, NOLA.proj)
+  model_polys <- spTransform(model_polys , NOLA.proj)
   
-  
-  coverage <- function(polys) {
-    rev <- over(m.calls, SpatialPolygons(polys@polygons, proj4string = polys@proj4string ))
-    sum(!is.na(rev))
-  }
   
   
   combs <- list()
   
-  combs$indexes <- combn(nrow(m.polys),m.size, simplify = FALSE)
+  combs$indexes <- combn(nrow(model_polys),model_size, simplify = FALSE)
   
-  combs$counts <- lapply(combs$indexes, function(indexes) coverage(m.polys[indexes,]))
+  combs$counts <- map_int(combs$indexes, ~calculate_call_coverage(model_polys[.x,], 
+  																																model_calls))
   
-  output.df <- data.frame(coverage = as.numeric(combs$counts))
+  output_df <- data.frame(coverage = as.numeric(combs$counts))
   
   
-  for (i in seq_len(nrow(output.df))) {
-    
+  for (i in seq_len(nrow(output_df))) {
     for (n in 1:length(combs$indexes[[i]])) {
       index <- combs$indexes[[i]][[n]]
       
-      output.df[i,n+1] <- m.polys@data$NewName[index]
+      output_df[i,n+1] <- model_polys@data$NewName[index]
     }
     
   }
   
-  
-  output <- output.df[order( output.df$coverage, decreasing = TRUE),]
+  output <- output_df %>% 
+  	arrange(desc(coverage))
   
   print(proc.time() - ptm)
-  
-  # df <- output
-  # df$NewName <- df$V2
-  # df <- join( df, model.polys@data, by = "NewName")
-  # df$V2 <- df$NewName
-  # df <- df[,1:3]
-  # 
-  # df$NewName <- df$V3
-  # df <- join( df, model.polys@data, by = "NewName")
-  # df$V3 <- df$NewName
-  # df <- df[,1:3]
-  # 
+
   return(output)
 }
 
@@ -78,7 +65,7 @@ add.poisson.test  <- function(solution.set) {
 
 getNames <- function(data) data[, grepl("V",names( data))]
 
-calculate_coverage <- function(p, c) {
+calculate_multi_coverage <- function(p, c) {
   
   over(c, p, returnList = TRUE) %>% 
     map_int(nrow) %>%
