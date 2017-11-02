@@ -95,15 +95,6 @@ coverage_estimates_file_name <- paste0( "data/", today(),
 																				additional_description,"_traffic_", 
 																				solution_size, ".csv")
 
-output_file_name <- paste0("data/solutions/", 
-											today(), 
-											"_coverage_estimates_",
-											additional_description,
-											traffic,
-											"_traffic_", 
-											solution_size,
-											".csv")
-
 ##For performance, run with a sample.  For full calculation, run with all drive-time polygons.
 polygon_sample <- polygons[1:10,]
 
@@ -234,6 +225,7 @@ full_list_data$Order <- row(full_list_data)[,1]
 ```
 
 
+
 ```{r}
 all_points <- readOGR("data/input_points", layer = "cleaned_points") %>% 
   spTransform( CRS("+init=epsg:4326"))
@@ -271,23 +263,18 @@ solution_points_df <- data.frame(solution_points) %>%
 ```
 
 
-## Save list  
+
+
+
+### Solution Map  
 
 ```{r}
-write_csv( solution_points_df,  output_file_name)
-```
-
-
-# Solution Map  
-
-```{r}
-dis_map <- qmap("New Orleans", zoom = 11, maptype = "roadmap") +
+map <- qmap("New Orleans", zoom = 11, maptype = "roadmap") +
   geom_point(data = solution_points_df, aes(coords.x1, coords.x2)) +
   guides(size="none") +
-  geom_label(aes(x=coords.x1, y=coords.x2, label=Order,hjust=0,vjust=0),
-  					 size = 4, 
-  					 data = solution_points_df, 
-            position = "nudge",
+  geom_label(size = 4, 
+            data = solution_points_df, 
+            aes(x=coords.x1, y=coords.x2, label=Order,hjust=0,vjust=0), position = "nudge",
             fontface = "bold",
             check_overlap = TRUE
             )
@@ -302,7 +289,7 @@ names(print_list) <- c("Name", "Address","Primary Location","Rank")
 
 
 ```{r}
-dis_map
+map
 ```
 
 
@@ -312,3 +299,53 @@ print_list
 ```
 
 
+
+```{r}
+library(ggfortify)
+make.graphable <- function(x) {
+  graphables <- spTransform(x, CRS("+init=epsg:4326"))
+  graphables@data$labX <- as.numeric(lapply(graphables@polygons, function(x) x@labpt[[1]]))
+  graphables@data$labY <- as.numeric(lapply(graphables@polygons, function(x) x@labpt[[2]]))
+  graphables@data$id <- rownames(graphables@data)
+  graphables.points <- fortify(graphables, region="id")
+  join(graphables.points, graphables@data, by="id")
+}
+
+names_to_graph <- c('Tulane Medical Center','SQUIRT 14',
+                    'Westbank Tolls',
+                    # 'I-10 and Read Blvd',
+                    'I-10 and Morrison',
+                    # "Old Gentilly/5000", 
+                    "I-10 and Downman Rd")
+# polygons.to.graph <- make.graphable(polygons[polygons$NewName %in% names_to_graph,])
+  polygons.to.graph <- make.graphable(full_list[1:4,])                           
+qmap("New Orleans", zoom = 11, maptype = "roadmap") +
+  geom_polygon(aes_string(x = "long", y = "lat", 
+                          group = 'group', fill = 'NewName'
+                          ), 
+               data = polygons.to.graph, 
+               alpha = 0.5, 
+               color = "black"
+               ) 
+
+
+  polygons.to.graph <- make.graphable(full_list[5:8,])                           
+qmap("New Orleans", zoom = 11, maptype = "roadmap") +
+  geom_polygon(aes_string(x = "long", y = "lat", 
+                          group = 'group', fill = 'NewName'
+                          ), 
+               data = polygons.to.graph, 
+               alpha = 0.5, 
+               color = "black"
+               ) 
+```
+
+
+
+## Save list  
+
+```{r}
+write_csv( solution_points_df,  paste("data/algorithm/", today(), "_coverage_estimates_",additional_description,traffic,"_traffic_", 
+                                      solution_size,".csv",
+                              sep = ""))
+```
