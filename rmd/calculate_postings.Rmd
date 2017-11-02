@@ -18,7 +18,20 @@ opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 ```{r}
 source('code/00_dependencies.R')
-source("code/02_load_placement_datasets.R")
+# source("code/02_load_placement_datasets.R")
+
+incidents <- read_feather('data/source_incidents/incidents.feather')
+
+##Use 2016 calls less February
+spatial_call_data <- incidents %>%
+	filter(!is.na(Latitude), 
+				 !is.na(Longtitude), 
+				 !is.na(ArrivedTime),
+				  year(IncidentDate) == 2016 & 
+          month(IncidentDate) != 2) %>% 
+	mutate( DayShift = if_else( between(hour(IncidentDate),7,18),"Day","Night"),
+					DayShift = factor(DayShift)) %>%
+  spatialize_incidents()
 ```
 
 
@@ -36,7 +49,17 @@ source("code/02_load_placement_datasets.R")
 ### Load polygons  
 
 ```{r}
-polygons <- read_polygons("data/drive_time_polygons", layer_name = "Drive_Time_polygons___8_Minutes")
+NOLA.proj <- CRS("+init=epsg:3452")
+
+polygons_directory <- "data/drive_time_polygons"
+layer_name <- "Drive_Time_polygons___8_Minutes"
+
+polygons <- readOGR(polygons_directory, layer = layer_name)
+  
+polygons <- polygons[ which( !grepl("martin luther king", 
+																		polygons@data$Address, 
+																		ignore.case = TRUE  )),] %>%
+	spTransform( NOLA.proj)
 ```
 
 

@@ -1,4 +1,4 @@
-NOLA.proj <- CRS("+init=epsg:3452")
+# NOLA.proj <- CRS("+init=epsg:3452")
 
 solve.simultaneous <- function(model.calls, model.polys, m.size) {
   ptm <- proc.time()
