@@ -1,6 +1,6 @@
 # EMS Ambulance Placement Optimization  
 
-## Projet Summary  
+## Project Summary  
 
 This repository contains the code used to optimize EMS posting locations.
 
