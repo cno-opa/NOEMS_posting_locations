@@ -1,7 +1,3 @@
-# tut
-
-
-
 # EMS Ambulance Placement Optimization  
 
 ## Projet Summary  
