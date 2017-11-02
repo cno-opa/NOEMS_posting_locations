@@ -41,25 +41,24 @@ solve_simultaneous <- function(model_calls, model_polys, model_size) {
 
 
 
-add.poisson.test  <- function(solution.set) {
-  top.coverage <- solution.set$coverage[1]
+add_poisson_test  <- function(solution_set) {
+  top_coverage <- solution_set$coverage[1]
   
-  poisson_test_p_value <- function(test.coverage,t = 1,r = top.coverage,alternative = "less") {
-    test <- poisson.test(test.coverage , t,  r, alternative)
-    round( test$p.value, digits = 16)
-  }
+  tested_solution <- solution_set
   
-  tested.solution <- solution.set
+  tested_solution$p.value <- map_dbl(tested_solution$coverage, 
+  															 ~poisson_test_p_value(.x, comparison_rate = top_coverage))
   
-  tested.solution$p.value <- sapply(tested.solution$coverage,poisson_test_p_value)
-  
-  return(tested.solution)
+  return(tested_solution)
 }
 
 
 
 
-
+poisson_test_p_value <- function(test_rate,comparison_rate) {
+	test <- poisson.test(test_rate , T = 1, r = comparison_rate, alternative = 'less')
+	round( test$p.value, digits = 16)
+}
 
 
 

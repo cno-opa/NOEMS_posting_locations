@@ -37,16 +37,16 @@ spatial_call_data <- incidents %>%
 
 
 
-## Setup  
+# Setup  
 
-### Drawing polygons  
+## Drawing polygons  
 
 - An ArcGIS Online Map with candidate locations can be used to draw drive time polygons.  It's found on AGO in abwilliamson folder... called EMS_candidate_location_map.  It uses points found in this project directory: data/input_points/cleaned_points.  High traffic = 5pm Monday.  Low-traffic = 2am Tuesday
 
 - Draw the polygons, extract the shapefile to data/algorithm/polygons/
 
 
-### Load polygons  
+## Load polygons  
 
 ```{r}
 NOLA.proj <- CRS("+init=epsg:3452")
@@ -65,7 +65,7 @@ polygons$NewName <- as.character(polygons$NewName)
 ```
 
 
-##Select calls for high traffic/DayShift   
+## Select calls for high traffic/DayShift   
 ```{r select_calls}
 dayshift_calls <- spatial_call_data[ spatial_call_data@data$DayShift == 'Day' &  
                              date(spatial_call_data@data$IncidentDate) >= date('2016-06-01') &
@@ -100,23 +100,19 @@ coverage_estimates <- solve_simultaneous(dayshift_calls, polygon_sample, solutio
 ```
 
 
-## Top Coverage Tier  
+## Define Top Coverage Tier  
 
 
 Now look at the coverage offered by these solution sets.  A good way to compare coverage across solution sets by performing a Poisson Test comparison with the highest-level of coverage.  The resulting p-value represents the probability of seeing a coverage rate less than or equal to the observed coverage rate, given that the actual coverage rate was the same as the top coverage rate.  
 
 
 ```{r}
-coverage_estimates <- add.poisson.test(coverage_estimates)
-```
+coverage_estimates <- add_poisson_test(coverage_estimates)
 
-
-
-
-```{r}
 p_value_threshold <- .0000001
 
-top_tier_polygon_sets <- coverage_estimates %>% filter(p.value >= p_value_threshold) %>%
+top_tier_polygon_sets <- coverage_estimates %>% 
+	filter(p.value >= p_value_threshold) %>%
   mutate(p.value = round(p.value,4))
 ```
 
