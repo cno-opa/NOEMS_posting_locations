@@ -67,7 +67,7 @@ polygons$NewName <- as.character(polygons$NewName)
 
 ## Select calls for high traffic/DayShift   
 ```{r select_calls}
-dayshift_calls <- spatial_call_data[ spatial_call_data@data$DayShift == 'Day' &  
+input_calls <- spatial_call_data[ spatial_call_data@data$DayShift == 'Day' &  
                              date(spatial_call_data@data$IncidentDate) >= date('2016-06-01') &
                              spatial_call_data$InitialPriority == 3,] %>% 
   spTransform( NOLA.proj) 
@@ -95,7 +95,7 @@ coverage_estimates_file_name <- paste0( "data/", today(),
 ##For performance, run with a sample.  For full calculation, run with all drive-time polygons.
 polygon_sample <- polygons[1:10,]
 
-coverage_estimates <- solve_simultaneous(dayshift_calls, polygon_sample, solution_size) %>%
+coverage_estimates <- solve_simultaneous(input_calls, polygon_sample, solution_size) %>%
 	write_csv(coverage_estimates_file_name)
 ```
 
@@ -106,7 +106,7 @@ coverage_estimates <- solve_simultaneous(dayshift_calls, polygon_sample, solutio
 Now look at the coverage offered by these solution sets.  A good way to compare coverage across solution sets by performing a Poisson Test comparison with the highest-level of coverage.  The resulting p-value represents the probability of seeing a coverage rate less than or equal to the observed coverage rate, given that the actual coverage rate was the same as the top coverage rate.  
 
 
-```{r}
+```{r poisson_test}
 coverage_estimates <- add_poisson_test(coverage_estimates)
 
 p_value_threshold <- .0000001
@@ -117,32 +117,27 @@ top_tier_polygon_sets <- coverage_estimates %>%
 ```
 
 
-## Overlapping coverage  
+## Calculate Overlapping coverage  
 
-```{r}
+How many calls are covered by more than one drive-time polygon?  
+
+```{r overlap_calc}
 ptm <- proc.time()
 
 
 polygon_names     <- top_tier_polygon_sets[, grepl("V",names( top_tier_polygon_sets))]
 
-get.polygons.by.name <- function(list, polygons.source) {
- 
-  polygons.source[polygons.source$NewName %in%  unlist(list), ]
-}
-
-
-
 output  <- top_tier_polygon_sets %>% 
-  mutate( indic = 1,
-    ID = cumsum(indic)) %>% 
+  mutate( indic = 1, 
+  				ID = cumsum(indic)) %>% 
   select(-indic) %>%
   group_by(ID) %>%
   nest() %>%
-  mutate(location_names = map(data, getNames))
-
-output <- output %>% mutate( polygon_set = map(location_names,get.polygons.by.name, polygons))
-
-output <- output %>% mutate( coverage = map(polygon_set, calculate_coverage, calls))
+  mutate(location_names = map(data, ~.x[, grepl("V",names( .x))]),
+  			 polygon_set = 
+						map(location_names,~polygons[polygons$NewName %in%  unlist(.x), ]),
+					coverage = 
+						map(polygon_set, calculate_multi_coverage, input_calls))
 
 
 
@@ -153,10 +148,10 @@ print(proc.time() - ptm)
 
 
 
-```{r}
+```{r simplify_overlap}
 overlap_measurements <- output %>% 
   unnest(data, coverage, .drop = TRUE) %>% 
-  mutate(TotalCalls = length(calls)) %>% 
+  mutate(TotalCalls = length(input_calls)) %>% 
   mutate(CoveragePercent = percent(coverage/TotalCalls),
           DoubleCoveragePercent = percent(double_coverage/TotalCalls),
             TripleCoveragePercent = percent(triple_coverage/TotalCalls),
@@ -168,21 +163,23 @@ overlap_measurements <- output %>%
 
 ## Selecting Optimal Set  
 
+Ultimately, the top solution is determined by a balance of coverage measurements, and usability as determined by user-testing with the dispatch team.
 
-```{r}
+```{r select_optimal_set}
 optimal_index <- 1
 
 solution_list <- overlap_measurements
 
 solution <- solution_list[optimal_index,]
 
-top.names <- solution[, grepl("V",names(solution_list))]
+top_polygon_names <- solution[, grepl("V",names(solution_list))]
 
+top_polygons <- polygons[polygons$NewName %in%  unlist(top_polygon_names), ]
 
-top.polygons <- get.polygons.by.name(top.names, polygons)
+top_polygons_data <- top_polygons@data
 
-top.polygons.data <- top.polygons@data
-top.polygons.data <- dplyr::select(top.polygons.data, c(IsNew:Address))
+top_polygons_data <- top_polygons_data %>%
+	dplyr::select(c(IsNew:Address))
 ```
 
 
